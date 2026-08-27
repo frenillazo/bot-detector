@@ -78,6 +78,14 @@ pytest tests/test_detection.py -v
 
 La curva resultante —recall frente a fidelidad y tamaño de campaña— debe acompañar a cualquier informe publicado. Un resultado sin su curva de sensibilidad no dice cuánta campaña se le escapó.
 
+Y la degradación por cobertura parcial, que es lo que determina qué se puede afirmar con datos incompletos:
+
+```bash
+botdetector curve --regime per_target_cap
+```
+
+Hallazgo principal: **a igual cantidad de datos retenidos, el recall varía entre 0,45 y 0,87 según cómo se hayan perdido**. La forma importa más que la cantidad. Y hay un régimen —observar solo una fracción de las publicaciones, que es el de la búsqueda de X— donde los datos parciales no te dejan ciego sino **equivocado**. Ver [docs/CURVAS.md](docs/CURVAS.md).
+
 ## Documentación
 
 - [METHODOLOGY.md](METHODOLOGY.md) — qué se mide, por qué, y qué NO se puede concluir

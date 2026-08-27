@@ -147,6 +147,54 @@ def report(
 
 
 @app.command()
+def curve(
+    regime: str = typer.Option(
+        "uniform",
+        help="uniform | actor_subset | target_subset | per_target_cap",
+    ),
+    seeds: int = typer.Option(10, help="Número de audiencias sintéticas por punto."),
+    fidelity: float = typer.Option(0.9, help="Cuánto ruido introduce el operador."),
+    out: Path | None = typer.Option(None, help="Fichero markdown de salida."),
+) -> None:
+    """Curva de degradación: qué se puede afirmar con datos parciales.
+
+    Responde a la única pregunta que importa antes de publicar una cifra: por
+    debajo de qué cobertura este detector deja de ver campañas, y a partir de
+    qué cobertura lo que dice es fiable.
+    """
+    from botdetector.validation import sweep, to_markdown
+    from botdetector.validation.curves import MINIMUM_COVERAGE
+
+    grids = {
+        "uniform": [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.3],
+        "actor_subset": [1.0, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2],
+        "target_subset": [1.0, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2],
+        "per_target_cap": [100, 40, 25, 20, 15, 10, 5],
+    }
+    if regime not in grids:
+        raise typer.BadParameter(f"régimen desconocido: {regime}")
+
+    console.print(f"[dim]Barriendo '{regime}' con {seeds} semillas por punto...[/dim]")
+    points = sweep(
+        regime=regime,
+        parameters=grids[regime],
+        seeds=list(range(20, 20 + seeds)),
+        fidelity=fidelity,
+    )
+
+    md = to_markdown(points, f"Régimen: {regime} (fidelidad {fidelity})")
+    console.print(md)
+    console.print(
+        f"\n[yellow]Suelo de cobertura publicable para este régimen: "
+        f"{MINIMUM_COVERAGE[regime]:.0%}[/yellow]"
+    )
+
+    if out is not None:
+        out.write_text(md + "\n", encoding="utf-8")
+        console.print(f"[green]Escrito en {out}[/green]")
+
+
+@app.command()
 def snapshot(
     db: Path = typer.Option(DEFAULT_DB, help="Ruta de la base DuckDB."),
     out: Path = typer.Option(Path("snapshots"), help="Directorio de salida."),

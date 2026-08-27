@@ -8,9 +8,13 @@ Jetstream, DuckDB, matriz bipartita, IDF, umbral nulo, Leiden, calibración a ni
 
 Curvas de precisión/recall frente a fidelidad del operador y tamaño de campaña. Resultados y puntos ciegos en [METHODOLOGY.md](../METHODOLOGY.md).
 
+Curvas de degradación por cobertura parcial, con cuatro regímenes de observación y suelos de publicación aplicados en código: [CURVAS.md](CURVAS.md).
+
 Pendiente de ampliar:
 
-- [ ] Curva frente a **fracción de datos muestreada**, que es lo que justificará qué se puede afirmar con los datos parciales de X
+- [ ] **Sesgo de recencia**: X no trunca al azar, devuelve las interacciones más recientes. El hueco más relevante que queda, y previsiblemente peor que el truncado aleatorio simulado
+- [ ] Regímenes combinados: ventana temporal *más* tope por publicación *más* pérdidas de conexión
+- [ ] Audiencias sintéticas con homofilia y comunidades temáticas, más parecidas a las reales
 - [ ] Validación contra positivos reales: archivo público de Operaciones de Información de X y datasets etiquetados de IO
 - [ ] Controles negativos sobre cuentas reales grandes y apolíticas — si marca a un club de fútbol, está midiendo *fandom*
 

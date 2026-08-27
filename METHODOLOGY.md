@@ -109,12 +109,27 @@ Ejecutar `pytest tests/test_detection.py`. Sobre audiencias sintéticas con verd
 
 `fidelity` es la probabilidad de que una cuenta coordinada amplifique cada mensaje de su repertorio: el mando que simula lo bien que un operador oculta su campaña.
 
+### Cobertura parcial
+
+Ninguna recolección real ve el 100% de las interacciones, y **la forma de perder datos importa más que la cantidad**: a igual retención (~80%), el recall varía entre 0,45 y 0,87 según el régimen. La razón es que la señal vive en los *pares* de interacciones, así que bajo muestreo uniforme a tasa *p* la evidencia cae con *p²* mientras el volumen cae con *p*.
+
+Suelos de cobertura por debajo de los cuales no se publica, aplicados en código (`validation/curves.py`):
+
+| Régimen | Suelo | Por debajo del suelo |
+|---|---|---|
+| Muestreo uniforme | 90% | Ciego |
+| Subconjunto de cuentas | 20% | Ciego |
+| **Subconjunto de publicaciones** | **40%** | **Puede fabricar clusters falsos** |
+| Tope por publicación (X) | 80% | Ciego |
+
+El tercero es el único régimen donde los datos parciales no te dejan ciego sino **equivocado**, y es precisamente el de la búsqueda de X. Curvas completas y control negativo en [docs/CURVAS.md](docs/CURVAS.md).
+
 ### Los puntos ciegos, dichos claramente
 
 1. **Campañas de menos de 10 cuentas son invisibles.** No hay masa de evidencia suficiente.
 2. **Operadores que introducen ruido por debajo de fidelidad 0,5 son invisibles.** Un operador que sepa cómo funciona esta herramienta puede evadirla haciendo que sus cuentas amplifiquen solo la mitad del repertorio, de forma desacoplada.
 3. **La herramienta no prueba intención ni autoría.** Detecta sincronía inverosímil. Que un grupo de cuentas actúe coordinadamente no prueba quién las opera ni con qué fin.
-4. **Un resultado negativo no prueba limpieza.** Dados los puntos 1 y 2, "no se detectó coordinación" significa exactamente eso, y nunca "no hay coordinación".
+4. **Un resultado negativo no prueba limpieza.** Dados los puntos 1 y 2, "no se detectó coordinación" significa exactamente eso, y nunca "no hay coordinación". Con cobertura parcial, menos aún: con el 70% de los datos bajo muestreo uniforme el detector es completamente ciego a una campaña que vería sin problema con el 90%.
 
 Cualquier informe publicado debe incluir esta curva de sensibilidad. Sin ella, no dice cuánta campaña se le escapó.
 

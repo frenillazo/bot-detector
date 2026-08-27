@@ -58,18 +58,27 @@ class AnalysisResult:
         return [self.matrix.actors[i] for i in sorted(flagged)]
 
 
-def analyze(
-    store: Store, target_author_id: str, config: AnalysisConfig | None = None
-) -> AnalysisResult:
-    """Perfila la audiencia que amplifica a `target_author_id`."""
-    cfg = config or AnalysisConfig()
+@dataclass(frozen=True)
+class Detection:
+    """Salida del motor de coordinación sobre un conjunto de aristas."""
 
-    edges = store.edges(
-        target_author_id=target_author_id,
-        actions=cfg.actions,
-        min_actor_activity=cfg.min_actor_activity,
-        min_target_engagement=cfg.min_target_engagement,
-    )
+    coordinated: set[str]
+    clusters: list[clustering.Cluster]
+    graph: similarity.SimilarityGraph
+    matrix: bipartite.BipartiteMatrix
+    min_evidence: float
+
+
+def detect_edges(edges: list[tuple[str, str]], config: AnalysisConfig | None = None) -> Detection:
+    """Ejecuta el motor completo sobre aristas (actor, objetivo).
+
+    Es el único punto donde vive la secuencia matriz -> umbral nulo -> grafo ->
+    clusters -> calibración. Tanto `analyze()` como las curvas de validación
+    pasan por aquí a propósito: una curva de sensibilidad medida sobre una
+    reimplementación del detector no describe al detector, y sería peor que no
+    tener curva, porque daría falsa confianza.
+    """
+    cfg = config or AnalysisConfig()
     bm = bipartite.build(edges)
 
     graph = similarity.build_graph(
@@ -92,7 +101,30 @@ def analyze(
     )
     flagged = result.above(min_evidence, cfg.min_cluster_size)
 
-    coordinated = {bm.actors[i] for c in flagged for i in c.actor_indices}
+    return Detection(
+        coordinated={bm.actors[i] for c in flagged for i in c.actor_indices},
+        clusters=flagged,
+        graph=graph,
+        matrix=bm,
+        min_evidence=min_evidence,
+    )
+
+
+def analyze(
+    store: Store, target_author_id: str, config: AnalysisConfig | None = None
+) -> AnalysisResult:
+    """Perfila la audiencia que amplifica a `target_author_id`."""
+    cfg = config or AnalysisConfig()
+
+    edges = store.edges(
+        target_author_id=target_author_id,
+        actions=cfg.actions,
+        min_actor_activity=cfg.min_actor_activity,
+        min_target_engagement=cfg.min_target_engagement,
+    )
+    detection = detect_edges(edges, cfg)
+    bm, graph, flagged = detection.matrix, detection.graph, detection.clusters
+    coordinated = detection.coordinated
 
     counts = store.actor_counts(target_author_id, actions=cfg.actions)
     raw_latencies = store.latencies(target_author_id, actions=cfg.actions)
