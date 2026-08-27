@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Datos: NUNCA se versionan datos crudos con identificadores personales.
+# Solo se publican agregados y el hash del snapshot (ver METHODOLOGY.md).
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+snapshots/
+
+# Informes generados
+reports/
+!reports/.gitkeep
+
+# Secretos
+.env
+.env.*
+!.env.example
+credentials.json
+
+# Entorno
+.DS_Store
+.idea/
+.vscode/
