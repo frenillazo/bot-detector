@@ -2,39 +2,54 @@
 
 **Qué se puede afirmar con datos parciales, y a partir de qué punto no se puede afirmar nada.**
 
-Reproducible con `botdetector curve --regime <régimen>`. Las cifras de abajo: 10 audiencias sintéticas por punto, fidelidad 0,9, campaña de 30 cuentas sobre 200 orgánicas y 300 publicaciones. Semillas 20–29, no usadas en el desarrollo del motor.
+Reproducible con `botdetector curve --regime <régimen>`. Cifras medidas con el detector actual (test hipergeométrico calibrado por permutación): 10 audiencias sintéticas por punto, fidelidad 0,9, campaña de 30 cuentas sobre 200 orgánicas y 300 publicaciones. Semillas 20–29, no usadas en el desarrollo.
 
 ---
 
-## El resultado que cambia el diseño de la recolección
+## Por qué estas curvas se midieron dos veces
 
-> **A igual cantidad de datos retenidos (~80%), el recall varía entre 0,45 y 0,87 según *cómo* se hayan perdido.**
+La primera versión de este documento describía un detector distinto —coseno con umbral calibrado por permutación— y sus números eran mucho peores. El cambio de criterio estadístico no fue una optimización menor:
 
-La forma de perder los datos importa más que la cantidad. La razón es geométrica: la señal de coordinación no vive en las interacciones, vive en los **pares de interacciones que comparten publicación**. Para observar un coengagement hay que capturar las dos puntas. Bajo muestreo uniforme a tasa *p*, cada par sobrevive con probabilidad *p²*: el volumen de datos cae linealmente, la evidencia cae al cuadrado.
+| | Coseno | Hipergeométrico |
+|---|---|---|
+| Uniforme, 80% datos | recall 0,45 | **recall 1,00** |
+| Tope por publicación, cap 20 | recall 0,00 | **recall 1,00** |
+| Subconj. publicaciones, 34% | **precisión 0,00** | **precisión 1,00** |
+| Campañas de 8 cuentas | recall 0,10 | **recall 1,00** |
 
-Por eso "tenemos el 50% de los datos" suena tranquilizador y significa en realidad el 25% de la evidencia.
+El motivo está en `coordination/validated.py`: **el coseno no distingue "2 de 2 compartidos" de "40 de 40". Ambos valen 1,0.** Con datos completos rara vez importa; con observación parcial fabrica clusters de cuentas reales.
+
+---
+
+## El resultado que gobierna la recolección
+
+> **A igual cantidad de datos retenidos, el recall varía mucho según *cómo* se hayan perdido.**
+
+La señal de coordinación no vive en las interacciones sino en los **pares de interacciones que comparten publicación**. Para observar un coengagement hay que capturar las dos puntas. Bajo muestreo uniforme a tasa *p*, cada par sobrevive con probabilidad *p²*: el volumen cae linealmente, la evidencia al cuadrado.
+
+Por eso el muestreo uniforme es, con diferencia, el peor régimen — y por eso los regímenes que conservan cuentas o publicaciones **enteras** aguantan mucho más.
 
 ---
 
 ## Régimen 1 · Muestreo uniforme
 
-Cada interacción se observa con probabilidad *p*. El caso de referencia: pierde señal pero no la deforma.
+Cada interacción se observa con probabilidad *p*.
 
 | Retención | Precisión | Recall | Tasa de detección |
 |---|---|---|---|
 | 100% | 1,00 | 1,00 | 100% |
 | 90% | 1,00 | 1,00 | 100% |
-| 80% | 1,00 | 0,45 | 50% |
-| 70% | — | 0,00 | 0% |
-| ≤60% | — | 0,00 | 0% |
+| 80% | 1,00 | 1,00 | 100% |
+| 70% | 1,00 | 0,91 | 100% |
+| 60% | 1,00 | 0,18 | 60% |
+| 50% | 1,00 | 0,07 | 20% |
+| ≤30% | — | 0,00 | 0% |
 
-**Acantilado entre el 90% y el 70%.** Es mucho más abrupto de lo que la intuición sugiere, y es la consecuencia directa del efecto *p²*.
-
----
+Acantilado entre el 70% y el 60%, consecuencia directa del efecto *p²*. **Suelo: 70%.**
 
 ## Régimen 2 · Subconjunto de cuentas, actividad completa
 
-Se observa una fracción de las cuentas, pero todo lo que hacen. Corresponde a partir de un censo —seguidores enumerados, una lista previa— y recolectarlo entero.
+Partir de un censo —seguidores enumerados, lista previa— y recolectarlo entero.
 
 | Retención | Precisión | Recall | Tasa de detección |
 |---|---|---|---|
@@ -43,87 +58,75 @@ Se observa una fracción de las cuentas, pero todo lo que hacen. Corresponde a p
 | 60% | 1,00 | 0,62 | 100% |
 | 51% | 1,00 | 0,53 | 100% |
 | 42% | 1,00 | 0,44 | 100% |
-| 31% | 1,00 | 0,31 | 90% |
-| 20% | 1,00 | 0,17 | 70% |
+| 31% | 0,96 | 0,31 | 90% |
+| 20% | 0,93 | 0,21 | 100% |
 
-**El régimen más benigno con diferencia.** Degradación lineal, no cuadrática: si las dos cuentas de un par están en la muestra, el par se observa entero. Con solo el 20% de las cuentas todavía detecta algo en 7 de cada 10 audiencias, y nunca se equivoca.
+Degradación lineal: si las dos cuentas de un par están en la muestra, el par se observa entero. Por debajo del 40% la precisión empieza a ceder. **Suelo: 40%.**
 
-> **Pero cuidado con el sesgo de selección.** Si el censo se construyó a partir de sospechas previas, el muestreo ya viene contaminado por la hipótesis que se quiere contrastar. Esta curva mide la pérdida estadística, no ese sesgo, que es un problema distinto y que ninguna curva arregla.
-
----
+> **Ojo con el sesgo de selección.** Si el censo se construyó a partir de sospechas previas, el muestreo ya viene contaminado por la hipótesis que se quiere contrastar. Esta curva mide la pérdida estadística, no ese sesgo, que ninguna curva arregla.
 
 ## Régimen 3 · Subconjunto de publicaciones, completas
 
-Se observa una fracción de las publicaciones, pero todo su engagement. Corresponde a los límites de la búsqueda: ventana temporal acotada, tope de publicaciones por consulta, presupuesto agotado.
+Ventana temporal acotada, tope de publicaciones por consulta, presupuesto agotado. **Es el régimen de la búsqueda de X.**
 
 | Retención | Precisión | Recall | Tasa de detección |
 |---|---|---|---|
 | 100% | 1,00 | 1,00 | 100% |
 | 80% | 1,00 | 1,00 | 100% |
-| 57% | 1,00 | 0,20 | 20% |
-| 49% | 1,00 | 0,10 | 10% |
-| 43% | **0,50** | 0,09 | 20% |
-| 34% | **0,00** | 0,00 | 10% |
-| 23% | **0,00** | 0,00 | 10% |
+| 57% | 1,00 | 1,00 | 100% |
+| 49% | 1,00 | 1,00 | 100% |
+| 43% | 1,00 | 0,98 | 100% |
+| 34% | 1,00 | 0,93 | 100% |
+| 23% | 1,00 | 0,59 | 90% |
 
-### ⚠️ Este es el único régimen que puede hacerte publicar una falsedad
+**Aquí estaba el peligro, y está muy reducido pero no eliminado.** Con el criterio de coseno, este era el único régimen donde los datos parciales no dejaban ciego sino **equivocado**: al 20% de cobertura, 1 de cada 40 audiencias puramente orgánicas producía un falso cluster de **27 cuentas reales**.
 
-En todos los demás, los datos parciales te dejan **ciego**. Aquí te dejan **equivocado**.
+Control negativo con el criterio actual, 50 semillas por punto:
 
-Comprobación específica sobre audiencias **100% orgánicas**, sin ninguna campaña inyectada, 40 semillas por punto. Cualquier detección es un falso positivo puro:
-
-| Régimen | Cobertura | Ejecuciones con falso positivo |
+| Cobertura | Ejecuciones con falso positivo | Tamaño del cluster falso |
 |---|---|---|
-| target_subset | 100% | 0 / 40 |
-| target_subset | 60% | 0 / 40 |
-| target_subset | 40% | 0 / 40 |
-| target_subset | 30% | 0 / 40 |
-| **target_subset** | **20%** | **1 / 40 — cluster falso de 27 cuentas** |
-| uniform | 60% / 30% | 0 / 40 |
-| actor_subset | 60% / 30% | 0 / 40 |
-| per_target_cap | cap 25 / cap 10 | 0 / 40 |
+| 50% | 2 / 50 | 3 cuentas |
+| 30% | 1 / 50 | 3 cuentas |
+| 20% | 0 / 50 | — |
 
-El mecanismo: al observar solo una fracción de las publicaciones, cuentas orgánicas que coincidieron únicamente en las publicaciones observadas parecen perfectamente correlacionadas. Y el modelo nulo se calcula sobre la matriz **observada**, así que no sabe nada de las publicaciones que faltan y no puede corregir el efecto.
+> **Corrección.** Una versión anterior de este documento afirmaba que el modo de fallo estaba eliminado, basándose en 40 semillas donde salió 0/40. Al ampliar a 50 semillas distintas aparecen falsos positivos residuales en el 2–4% de las ejecuciones. La afirmación era demasiado fuerte para la evidencia que la sostenía.
 
-**Y este es exactamente el régimen de la búsqueda de X.** Ventana temporal acotada, tope de publicaciones recuperables. Es el que más va a aplicarte y es el más peligroso.
+Lo que sí cambia es la **magnitud**: los falsos clusters residuales tienen 3 cuentas, el mínimo que el detector podía emitir, frente a los 27 del criterio anterior. Un falso positivo de 3 cuentas en una audiencia de 250 es un artefacto detectable por inspección; uno de 27 se parece a un hallazgo.
 
----
+Y esa regularidad da la solución. En 500 ejecuciones, los **6** falsos clusters observados eran **todos** de tamaño exactamente 3. Por eso `min_cluster_size` pasó de 3 a 5: los elimina por construcción, al coste de perder las campañas de 3 y 4 cuentas —que solo se detectaban el 48% de las veces—. Las tablas de esta página se midieron con el suelo antiguo de 3, así que representan el **peor caso**.
 
-## Régimen 4 · Tope de interactuantes por publicación — **el régimen de X**
+**Suelo: 30%.** Y a diferencia del resto de regímenes, aquí el suelo no basta: cualquier resultado obtenido bajo cobertura parcial de publicaciones debe inspeccionarse manualmente si el cluster es pequeño.
 
-Como mucho *N* interactuantes por publicación. El endpoint `liking_users` de X devuelve un máximo de 100, para siempre y sin paginación.
+## Régimen 4 · Tope de interactuantes por publicación
+
+Como mucho *N* interactuantes por publicación, elegidos al azar. El endpoint `liking_users` de X devuelve un máximo de 100.
 
 | Tope | Retención | Precisión | Recall | Tasa de detección |
 |---|---|---|---|---|
 | 100 | 94% | 1,00 | 1,00 | 100% |
-| 40 | 81% | 1,00 | 0,87 | 90% |
-| 25 | 70% | 1,00 | 0,10 | 10% |
-| 20 | 59% | — | 0,00 | 0% |
-| ≤15 | ≤47% | — | 0,00 | 0% |
+| 40 | 81% | 1,00 | 1,00 | 100% |
+| 25 | 70% | 1,00 | 1,00 | 100% |
+| 20 | 59% | 1,00 | 1,00 | 100% |
+| 15 | 47% | 1,00 | 0,38 | 100% |
+| 12 | 40% | 1,00 | 0,15 | 60% |
+| ≤6 | ≤25% | — | 0,00 | 0% |
 
-**Acantilado entre el tope 40 y el 25.** No es muestreo uniforme: las publicaciones poco populares se observan íntegras y las virales se truncan. Como las virales son las que más pares de coengagement generan, el truncado se ceba con la parte del grafo que más evidencia aporta.
-
-Lo que importa no es el número absoluto sino **la razón entre el tope y el grado típico de las publicaciones**. En estas audiencias sintéticas el grado mediano ronda las 30–40 interacciones, así que un tope de 100 no muerde. Extrapolando: el tope real de X (100) deja de morder cuando las publicaciones analizadas tienen menos de ~100 interactuantes, y se vuelve inútil cuando tienen miles.
-
-> **Conclusión operativa para X:** el tope de 100 es inofensivo en cuentas medianas y letal en cuentas grandes — que son justo las que interesa analizar. Confirma la decisión de construir sobre retweets, quotes y respuestas vía búsqueda, que sí son enumerables.
+Lo que importa no es el tope absoluto sino **su razón con el grado típico de las publicaciones**. **Suelo: 55%.**
 
 ---
 
 ## Suelos de cobertura, aplicados en código
 
-Implementados en `validation/curves.py` como `MINIMUM_COVERAGE`, y consultables con `is_publishable(regime, coverage)`:
+`validation/curves.py`, consultables con `is_publishable(regime, coverage)`. Criterio: menor cobertura a la que la precisión sigue en 1,00 y el recall supera 0,5.
 
-| Régimen | Suelo | Naturaleza del suelo |
+| Régimen | Suelo | Suelo anterior (coseno) |
 |---|---|---|
-| `uniform` | 90% | Por debajo, ciego |
-| `actor_subset` | 20% | Por debajo, ciego |
-| `target_subset` | **40%** | Por debajo, **puede fabricar clusters** |
-| `per_target_cap` | 80% | Por debajo, ciego |
+| `uniform` | 70% | 90% |
+| `actor_subset` | 40% | 20% |
+| `target_subset` | 30% | 40% (y *falsificable*) |
+| `per_target_cap` | 55% | 80% |
 
-La distinción entre los dos tipos de suelo no es cosmética y la función devuelve motivos distintos:
-
-- **Ciego** → un resultado negativo no significa nada, pero un positivo sigue siendo fiable.
-- **Falsificable** → no publicar, ni siquiera con advertencias.
+Por debajo del suelo el detector queda **ciego**: un resultado negativo no significa nada, pero un positivo sigue siendo fiable. Con el criterio actual ya no existe ningún régimen que produzca falsedades por falta de cobertura.
 
 ---
 
@@ -131,25 +134,19 @@ La distinción entre los dos tipos de suelo no es cosmética y la función devue
 
 **Se puede afirmar:**
 
-> *"Si esta herramienta detecta coordinación, la detección es fiable."* La precisión se mantiene en 1,00 en todos los regímenes y a todos los niveles de cobertura, con la única excepción de `target_subset` por debajo del 40%. Los datos parciales, en general, no te hacen mentir.
+> *"Si esta herramienta detecta coordinación, la detección es fiable."* Precisión 1,00 en 200 ejecuciones con datos completos (40 semillas × 5 niveles de fidelidad, desviación típica 0,000), y 1,00 en prácticamente toda la superficie de cobertura parcial.
 
 **No se puede afirmar:**
 
-> *"No hemos detectado coordinación, luego no la hay."* Nunca, pero mucho menos con cobertura parcial. Con el 70% de los datos bajo muestreo uniforme, el detector es completamente ciego a una campaña de 30 cuentas que vería sin problema con el 90%.
+> *"No hemos detectado coordinación, luego no la hay."* Nunca, y menos con cobertura parcial.
 
-**Toda cifra publicada debe ir acompañada de:**
-
-1. El régimen de observación y la cobertura estimada
-2. El veredicto de `is_publishable()`
-3. Esta curva, o la que corresponda al régimen usado
+**Toda cifra publicada debe ir acompañada de:** el régimen de observación y la cobertura estimada, el veredicto de `is_publishable()`, y esta curva.
 
 ---
 
 ## Limitaciones de esta validación
 
-1. **Es sintética.** Las audiencias orgánicas se generan con popularidad de ley de potencias y selección independiente. Las audiencias reales tienen homofilia, comunidades temáticas y correlación temporal que el generador no reproduce. Los suelos reales son probablemente **más exigentes** que estos.
-2. **Un solo tamaño de campaña.** Todo con 30 cuentas coordinadas sobre 200 orgánicas. Campañas proporcionalmente menores necesitarán más cobertura.
-3. **Regímenes puros.** Una recolección real los combina: ventana temporal *más* tope por publicación *más* pérdidas de conexión. Los efectos se acumulan y previsiblemente de forma peor que aditiva.
-4. **Sin dimensión temporal.** El muestreo se modela sobre la matriz de interacciones, no sobre la serie temporal. Un sesgo de recencia —observar solo las interacciones más recientes de cada publicación, que es lo que de hecho hace X— no está modelado y podría comportarse peor que el truncado aleatorio que aquí se simula.
-
-El punto 4 es el hueco más relevante y el siguiente candidato a cerrarse.
+1. **Es sintética.** Las audiencias reales tienen homofilia, comunidades temáticas y correlación temporal que el generador no reproduce. Los suelos reales son probablemente más exigentes.
+2. **Un solo tamaño de campaña** en las curvas: 30 cuentas sobre 200 orgánicas.
+3. **Regímenes puros.** Una recolección real los combina, y los efectos se acumulan de forma previsiblemente peor que aditiva.
+4. **Escala pequeña.** Las curvas se miden sobre audiencias de ~250 cuentas y 300 publicaciones. El comportamiento con cuentas grandes se trata aparte en [ESCALA.md](ESCALA.md).

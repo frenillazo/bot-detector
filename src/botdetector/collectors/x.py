@@ -4,12 +4,25 @@ RESTRICCIÓN CENTRAL, y la razón de que este módulo no recolecte likes
 --------------------------------------------------------------------
 El endpoint `GET /2/tweets/:id/liking_users` devuelve **como máximo 100 usuarios
 por publicación, para siempre**. No hay paginación más allá de ese tope, y los
-100 no son una muestra aleatoria. Lo mismo aplica históricamente a
-`/retweeted_by`.
+100 no son una muestra aleatoria: son **los más recientes**. Lo mismo aplica
+históricamente a `/retweeted_by`.
 
-Consecuencia: **el "% de likes que son bots" no es medible en X**. Un tweet con
-40.000 likes expone 100. Cualquier herramienta que publique ese porcentaje sobre
-la API oficial está extrapolando desde una muestra sesgada sin decirlo.
+Consecuencia inmediata: **el "% de likes que son bots" no es medible en X**. Un
+tweet con 40.000 likes expone 100. Cualquier herramienta que publique ese
+porcentaje sobre la API oficial extrapola desde una muestra sesgada sin decirlo.
+
+Y una consecuencia mucho peor, medida en `docs/ESCALA.md`: como el truncado es
+por recencia y las granjas actúan en los primeros segundos, en cuentas grandes
+el tope **elimina la campaña entera**.
+
+    Cuenta grande simulada, 440 interactuantes de mediana por publicación:
+      tope aleatorio de 100 -> sobrevive el 22% de la campaña
+      tope por recencia     -> sobrevive el  0%
+
+No es una limitación de volumen que se pueda compensar recolectando más. Es un
+sesgo sistemático en contra exactamente de la señal que se busca, y ningún
+parámetro lo corrige. Estos endpoints son inservibles para este análisis en
+cuentas grandes, que son las que interesan.
 
 Lo que sí es enumerable, y sobre lo que se construye aquí:
 
@@ -59,11 +72,14 @@ class XCollector(Collector):
     @property
     def coverage(self) -> str:
         return (
-            "Cobertura PARCIAL. Likes y retweeters directos están limitados a 100 "
-            "usuarios por publicación (tope duro de la API, sin paginación), por lo "
-            "que no se recolectan. Se recolectan retweets, quotes y respuestas vía "
-            "búsqueda, sujetos a la ventana temporal del nivel de acceso contratado. "
-            "Todo resultado debe reportarse como estimación sobre muestra parcial."
+            "Cobertura PARCIAL. Likes y retweeters directos NO se recolectan: la API "
+            "los limita a los 100 usuarios más recientes por publicación, y ese "
+            "truncado por recencia elimina la campaña entera en cuentas grandes "
+            "(0% de supervivencia medido; ver docs/ESCALA.md). Se recolectan "
+            "retweets, quotes y respuestas vía búsqueda, sujetos a la ventana "
+            "temporal del nivel de acceso: régimen 'target_subset', que degrada la "
+            "sensibilidad pero no sesga contra la campaña. Todo resultado debe "
+            "reportarse como estimación sobre muestra parcial, con su cobertura."
         )
 
     async def stream(

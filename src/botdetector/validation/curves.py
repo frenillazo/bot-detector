@@ -21,25 +21,27 @@ from botdetector.validation import sampling
 from botdetector.validation.synthetic import SyntheticAudience, generate, score_detection
 
 MINIMUM_COVERAGE = {
-    "uniform": 0.90,
-    "actor_subset": 0.20,
-    "target_subset": 0.40,
-    "per_target_cap": 0.80,
+    "uniform": 0.70,
+    "actor_subset": 0.40,
+    "target_subset": 0.30,
+    "per_target_cap": 0.55,
 }
 """Cobertura mínima por régimen para que el resultado sea publicable.
 
-Derivados de las curvas de `docs/CURVAS.md`, no elegidos a ojo. Dos criterios
-distintos según el régimen:
+Derivados de las curvas de `docs/CURVAS.md` con un criterio explícito: la menor
+cobertura a la que la precisión sigue en 1,00 **y** el recall se mantiene por
+encima de 0,5.
 
-- Para `uniform`, `actor_subset` y `per_target_cap` el suelo marca dónde el
-  recall deja de ser utilizable. Por debajo, el detector queda **ciego**: no
-  miente, simplemente no ve. Un resultado negativo ahí no significa nada.
+Recalibrados tras sustituir el criterio de coseno por el test hipergeométrico
+calibrado por permutación. Los suelos anteriores eran mucho más altos —90% para
+`uniform`, 80% para `per_target_cap`— porque describían un detector peor.
 
-- Para `target_subset` el suelo es de otra naturaleza y más serio. Es el único
-  régimen donde el muestreo parcial llega a **fabricar** clusters: con el 20% de
-  las publicaciones observadas, 1 de cada 40 audiencias puramente orgánicas
-  produjo un falso cluster de 27 cuentas. Por debajo del 40% el resultado no es
-  incompleto, es potencialmente falso.
+El cambio cualitativo importante está en `target_subset`. Con el criterio de
+coseno era el único régimen que **fabricaba** clusters: al 20% de cobertura, 1 de
+cada 40 audiencias puramente orgánicas producía un falso cluster de 27 cuentas
+reales. Con el criterio actual ese modo de fallo desaparece —0 de 40, y precisión
+1,00 en toda la curva—, y su suelo pasa a marcar simplemente pérdida de
+sensibilidad, como los demás.
 
 Importa porque el régimen de la búsqueda de X —ventana temporal acotada, tope de
 publicaciones por consulta— *es* subconjunto de publicaciones.
@@ -60,13 +62,6 @@ def is_publishable(regime: str, coverage: float) -> tuple[bool, str]:
         return True, (
             f"Cobertura {coverage:.0%} sobre un suelo de {floor:.0%} para el régimen "
             f"'{regime}'. El resultado es interpretable."
-        )
-
-    if regime == "target_subset":
-        return False, (
-            f"Cobertura {coverage:.0%}, por debajo del suelo de {floor:.0%}. En este "
-            "régimen el muestreo parcial puede fabricar clusters inexistentes: NO "
-            "publicar, ni siquiera con advertencias."
         )
 
     return False, (

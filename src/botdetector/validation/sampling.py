@@ -13,12 +13,17 @@ cuadráticamente mientras el volumen de datos solo cae linealmente.
 De ahí que un "tenemos el 50% de los datos" suene tranquilizador y signifique en
 realidad el 25% de la evidencia.
 
-Los cuatro regímenes implementados corresponden a formas reales de perder datos:
+Los regímenes implementados corresponden a formas reales de perder datos:
 
 - `uniform`          muestreo aleatorio de interacciones
-- `per_target_cap`   tope de N interactuantes por publicación — **el caso de X**
+- `per_target_cap`   tope de N interactuantes por publicación, al azar
+- `recency_cap`      tope de N, **los más recientes — el régimen real de X**
 - `actor_subset`     solo se observan algunas cuentas, pero enteras
 - `target_subset`    solo se observan algunas publicaciones, pero enteras
+
+Los dos últimos topes retienen la misma cantidad de datos y dan resultados
+opuestos: en cuentas grandes, el aleatorio conserva el 22% de una campaña y el de
+recencia el 0%. Ver `docs/ESCALA.md`.
 """
 
 from __future__ import annotations
@@ -65,6 +70,42 @@ def per_target_cap(edges: Edges, cap: int, rng: np.random.Generator) -> Edges:
         else:
             chosen = rng.choice(len(actors), size=cap, replace=False)
             out.extend((actors[i], target) for i in chosen)
+    return out
+
+
+def recency_cap(edges: Edges, cap: int, latency: list[float], rng: np.random.Generator) -> Edges:
+    """Los `cap` interactuantes **más recientes** de cada publicación.
+
+    **Este es el régimen real de X, y es peor que el tope aleatorio.**
+
+    El endpoint no devuelve 100 interactuantes al azar: devuelve los 100 últimos.
+    Y las granjas actúan rápido, en los primeros segundos tras la publicación.
+    La consecuencia es estructural y desagradable:
+
+    > En una publicación con más interacciones que el tope, el truncado por
+    > recencia **elimina preferentemente a la granja y conserva a los orgánicos
+    > tardíos**. No pierde datos al azar: pierde justo la señal que se busca.
+
+    Un tope aleatorio del mismo tamaño conserva una muestra representativa. Este
+    conserva una muestra sistemáticamente sesgada en contra de la detección.
+
+    `latency` va alineado con `edges`: menor valor, interacción más temprana.
+    `rng` solo se usa para deshacer empates.
+    """
+    if len(latency) != len(edges):
+        raise ValueError("`latency` debe ir alineado con `edges`")
+
+    by_target: dict[str, list[tuple[float, int]]] = defaultdict(list)
+    jitter = rng.random(len(edges)) * 1e-9
+    for i, (_, target) in enumerate(edges):
+        by_target[target].append((latency[i] + jitter[i], i))
+
+    out: Edges = []
+    for entries in by_target.values():
+        entries.sort()
+        # Los más recientes son los de mayor retardo: se conserva la cola.
+        for _, i in entries[-cap:]:
+            out.append(edges[i])
     return out
 
 

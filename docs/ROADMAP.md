@@ -10,22 +10,32 @@ Curvas de precisión/recall frente a fidelidad del operador y tamaño de campañ
 
 Curvas de degradación por cobertura parcial, con cuatro regímenes de observación y suelos de publicación aplicados en código: [CURVAS.md](CURVAS.md).
 
+**Sesgo de recencia y cuentas grandes** ✅ — [ESCALA.md](ESCALA.md). Resultado: en cuentas grandes el truncado por recencia de X elimina el **100%** de la campaña, frente al 78% que elimina un truncado aleatorio equivalente. Los endpoints de interactuantes por publicación no son utilizables a esa escala.
+
 Pendiente de ampliar:
 
-- [ ] **Sesgo de recencia**: X no trunca al azar, devuelve las interacciones más recientes. El hueco más relevante que queda, y previsiblemente peor que el truncado aleatorio simulado
 - [ ] Regímenes combinados: ventana temporal *más* tope por publicación *más* pérdidas de conexión
 - [ ] Audiencias sintéticas con homofilia y comunidades temáticas, más parecidas a las reales
+- [ ] Caracterizar la transición: a partir de qué razón interactuantes/tope empieza a morder el sesgo de recencia
 - [ ] Validación contra positivos reales: archivo público de Operaciones de Información de X y datasets etiquetados de IO
 - [ ] Controles negativos sobre cuentas reales grandes y apolíticas — si marca a un club de fútbol, está midiendo *fandom*
 
 ## Fase 3 — Adaptador de X
 
-Sobre **retweets, quotes y respuestas**, nunca sobre likes. La razón está en [`collectors/x.py`](../src/botdetector/collectors/x.py): el endpoint `liking_users` devuelve un máximo de 100 usuarios por publicación, para siempre y sin paginación, y no son 100 aleatorios.
+Sobre **retweets, quotes y respuestas**, nunca sobre likes ni retweeters. Lo que empezó siendo una decisión por el tope de 100 usuarios por publicación está ahora medido y es mucho más grave: ese tope no trunca al azar sino por recencia, y en cuentas grandes elimina el 100% de la campaña. Ver [ESCALA.md](ESCALA.md).
 
 - [ ] Búsqueda por `conversation_id` para respuestas
 - [ ] Búsqueda con `is:retweet` para amplificaciones
 - [ ] Búsqueda por URL del tweet original para quotes
-- [ ] Control de presupuesto con corte duro (pago por uso: ~0,005 USD por lectura de publicación, ~0,010 por lectura de usuario, sin tramo gratuito para nuevas altas desde 2026)
+- [ ] Control de presupuesto con corte duro
+
+### Vía de acceso
+
+El **Artículo 40(12) del DSA** cambia el planteamiento respecto a lo previsto inicialmente: acceso gratuito a datos públicos para investigadores afiliados a entidades sin ánimo de lucro, sin proceso de acreditación, y con las prohibiciones contractuales de scraping declaradas incompatibles con el DSA. La Comisión multó a X con 120 M€ en diciembre de 2025, 40 de ellos por incumplir ese artículo, y aceptó su plan correctora en julio de 2026.
+
+Herramienta candidata para la recolección: **`twscrape`** (Python) — rotación multi-cuenta, gestión de límites de tasa por cuenta cada 15 minutos, soporte de retweeters, seguidores y búsqueda. Es el estándar de facto. Evaluar también la API oficial una vez implementado el acceso gratuito comprometido por X.
+
+> **Importante:** la cobertura legal del scraping bajo el 40(12) depende de cumplir los requisitos de investigador elegible. Sin la entidad sin ánimo de lucro constituida y el compromiso de publicación, no aplica.
 
 ## Fase 4 — Perfilado de cuentas
 

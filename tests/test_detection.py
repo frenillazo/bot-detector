@@ -4,6 +4,7 @@ Este es el test que justifica la existencia de la herramienta. Si falla, ningún
 número que produzca el resto del código es publicable.
 """
 
+import numpy as np
 import pytest
 
 from botdetector.coordination import bipartite, clustering, similarity
@@ -28,6 +29,30 @@ def test_recovers_high_fidelity_campaign():
 
     assert scores["recall"] >= 0.8
     assert scores["precision"] >= 0.9
+
+
+def test_partial_coverage_does_not_manufacture_campaigns():
+    """El modo de fallo que motivó cambiar de coseno a test hipergeométrico.
+
+    Observando solo una fracción de las publicaciones, el criterio de coseno
+    llegó a marcar 27 cuentas orgánicas reales como granja: con grado observado
+    2, coincidir en 2 posts da similitud 1,000.
+
+    Los falsos positivos residuales del criterio actual son todos de tamaño 3, y
+    el suelo de `min_cluster_size` los descarta. Este test fija ese
+    comportamiento para que nadie lo baje sin darse cuenta.
+    """
+    from botdetector.pipeline import AnalysisConfig, detect_edges
+    from botdetector.validation import sampling
+
+    flagged_runs = 0
+    for seed in (100, 111, 122, 133, 144):
+        audience = generate(n_coordinated=0, n_organic=250, seed=seed)
+        observed = sampling.target_subset(audience.edges, 0.4, np.random.default_rng(seed + 777))
+        if detect_edges(observed, AnalysisConfig(seed=seed)).coordinated:
+            flagged_runs += 1
+
+    assert flagged_runs == 0
 
 
 def test_no_false_positives_on_purely_organic_audience():

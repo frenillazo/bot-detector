@@ -1,5 +1,5 @@
 """Motor de detección de coordinación."""
 
-from botdetector.coordination import bipartite, clustering, similarity
+from botdetector.coordination import bipartite, clustering, similarity, validated
 
-__all__ = ["bipartite", "clustering", "similarity"]
+__all__ = ["bipartite", "clustering", "similarity", "validated"]

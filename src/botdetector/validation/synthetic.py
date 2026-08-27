@@ -32,6 +32,13 @@ class SyntheticAudience:
     edges: list[tuple[str, str]]
     coordinated_actors: set[str]
     organic_actors: set[str]
+    latency: list[float] | None = None
+    """Retardo relativo de cada interacción respecto a su publicación, en [0, 1].
+
+    Alineado con `edges`. Necesario para modelar el sesgo de recencia: X no
+    trunca al azar, devuelve los interactuantes **más recientes**, y las granjas
+    actúan rápido. Sin este campo no se puede simular ese régimen.
+    """
 
     @property
     def n_actors(self) -> int:
@@ -47,6 +54,7 @@ def generate(
     campaign_size: int = 40,
     fidelity: float = 0.9,
     popularity_alpha: float = 1.5,
+    campaign_speed: float = 0.05,
     seed: int = 0,
 ) -> SyntheticAudience:
     """Construye una audiencia sintética.
@@ -54,6 +62,12 @@ def generate(
     `fidelity` es el parámetro que importa: la probabilidad de que una cuenta
     coordinada amplifique cada mensaje de su repertorio. Es el mando que simula
     lo bien que un operador oculta su campaña.
+
+    `campaign_speed` fija cuánto antes reacciona la campaña. Las cuentas
+    orgánicas reciben un retardo uniforme en [0, 1]; las coordinadas, uniforme en
+    [0, campaign_speed]. Con el valor por defecto la granja actúa en el primer 5%
+    de la ventana, que es el comportamiento documentado de las granjas reales y
+    lo que hace posible simular el sesgo de recencia.
     """
     rng = np.random.default_rng(seed)
     targets = [f"post:{i}" for i in range(n_targets)]
@@ -64,6 +78,7 @@ def generate(
     weights /= weights.sum()
 
     edges: list[tuple[str, str]] = []
+    latency: list[float] = []
 
     organic = set()
     for i in range(n_organic):
@@ -71,7 +86,9 @@ def generate(
         organic.add(actor)
         k = max(1, int(rng.poisson(organic_activity)))
         chosen = rng.choice(n_targets, size=min(k, n_targets), replace=False, p=weights)
-        edges.extend((actor, targets[t]) for t in chosen)
+        for t in chosen:
+            edges.append((actor, targets[t]))
+            latency.append(float(rng.random()))
 
     coordinated = set()
     if n_coordinated > 0:
@@ -80,10 +97,17 @@ def generate(
             actor = f"coord:{i}"
             coordinated.add(actor)
             mask = rng.random(len(campaign)) < fidelity
-            edges.extend((actor, targets[t]) for t in campaign[mask])
+            for t in campaign[mask]:
+                edges.append((actor, targets[t]))
+                latency.append(float(rng.random() * campaign_speed))
 
-    rng.shuffle(edges)  # type: ignore[arg-type]
-    return SyntheticAudience(edges=edges, coordinated_actors=coordinated, organic_actors=organic)
+    order = rng.permutation(len(edges))
+    return SyntheticAudience(
+        edges=[edges[i] for i in order],
+        coordinated_actors=coordinated,
+        organic_actors=organic,
+        latency=[latency[i] for i in order],
+    )
 
 
 def score_detection(detected: set[str], truth: SyntheticAudience) -> dict[str, float]:

@@ -37,6 +37,57 @@ def test_per_target_cap_leaves_small_targets_intact():
     assert sum(1 for _, t in kept if t == "viral") == 10
 
 
+class TestRecencyBias:
+    """El régimen real de X: se conservan los interactuantes más recientes."""
+
+    def test_keeps_the_latest_not_a_random_sample(self):
+        edges = [(f"a{i}", "p") for i in range(10)]
+        latency = [i / 10 for i in range(10)]  # a0 el más temprano, a9 el más tardío
+        kept = sampling.recency_cap(edges, 3, latency, np.random.default_rng(0))
+        assert {a for a, _ in kept} == {"a7", "a8", "a9"}
+
+    def test_erases_a_fast_campaign_entirely(self):
+        """El hallazgo de docs/ESCALA.md, como test de regresión.
+
+        Una granja rápida sobre una publicación con muchos más interactuantes
+        que el tope desaparece por completo, mientras que un tope aleatorio del
+        mismo tamaño conservaría una fracción representativa.
+        """
+        farm = [(f"bot{i}", "viral") for i in range(30)]
+        crowd = [(f"human{i}", "viral") for i in range(400)]
+        edges = farm + crowd
+        latency = [0.01] * len(farm) + list(np.linspace(0.1, 1.0, len(crowd)))
+
+        recency = sampling.recency_cap(edges, 100, latency, np.random.default_rng(0))
+        random_cap = sampling.per_target_cap(edges, 100, np.random.default_rng(0))
+
+        surviving_bots_recency = sum(1 for a, _ in recency if a.startswith("bot"))
+        surviving_bots_random = sum(1 for a, _ in random_cap if a.startswith("bot"))
+
+        assert surviving_bots_recency == 0
+        assert surviving_bots_random > 0
+
+    def test_does_not_truncate_below_the_cap(self):
+        edges = [(f"a{i}", "p") for i in range(5)]
+        kept = sampling.recency_cap(edges, 100, [0.5] * 5, np.random.default_rng(0))
+        assert len(kept) == 5
+
+    def test_rejects_misaligned_latency(self):
+        with pytest.raises(ValueError, match="alineado"):
+            sampling.recency_cap([("a", "p")], 10, [0.1, 0.2], np.random.default_rng(0))
+
+
+def test_generator_makes_the_campaign_act_faster_than_the_crowd():
+    """Sin esta diferencia de latencia no se puede simular el sesgo de recencia."""
+    from botdetector.validation import generate
+
+    aud = generate(fidelity=1.0, n_coordinated=30, seed=0)
+    lat = np.array(aud.latency)
+    is_coord = np.array([a in aud.coordinated_actors for a, _ in aud.edges])
+
+    assert lat[is_coord].max() < lat[~is_coord].mean()
+
+
 def test_actor_subset_keeps_full_activity_of_kept_actors():
     """Si una cuenta entra en la muestra, entra con toda su actividad."""
     edges = _edges(30, 8)
@@ -113,21 +164,29 @@ class TestCoverageFloors:
         ok, _ = is_publishable("uniform", 0.5)
         assert not ok
 
-    def test_blindness_and_falsification_are_distinguished(self):
-        """Quedarse ciego y equivocarse son fallos distintos; el motivo lo dice."""
-        _, blind = is_publishable("uniform", 0.5)
-        _, false = is_publishable("target_subset", 0.2)
+    def test_below_floor_means_blind_not_wrong(self):
+        """Con el criterio hipergeométrico, quedarse corto de datos ciega, no miente.
 
-        assert "ciego" in blind
-        assert "ausencia de coordinación" in blind
-        assert "fabricar" in false
-        assert "NO publicar" in false
+        Con el criterio de coseno anterior, `target_subset` llegaba a fabricar
+        clusters de cuentas reales. Ese modo de fallo ya no existe, y el motivo
+        que devuelve la función lo refleja.
+        """
+        _, reason = is_publishable("target_subset", 0.1)
+        assert "ciego" in reason
+        assert "ausencia de coordinación" in reason
+        assert "fabricar" not in reason
 
     def test_unknown_regime_is_refused(self):
         ok, reason = is_publishable("inventado", 1.0)
         assert not ok
         assert "desconocido" in reason
 
-    def test_target_subset_floor_is_the_strictest_among_fraction_regimes(self):
-        """El regimen que puede fabricar clusters exige mas que los que solo ciegan."""
-        assert MINIMUM_COVERAGE["target_subset"] > MINIMUM_COVERAGE["actor_subset"]
+    def test_uniform_is_the_strictest_regime(self):
+        """El muestreo uniforme rompe los pares, así que exige más cobertura.
+
+        La señal vive en pares de interacciones: bajo muestreo uniforme a tasa p
+        cada par sobrevive con probabilidad p². Los regímenes que preservan
+        cuentas o publicaciones enteras conservan los pares y aguantan mucho más.
+        """
+        assert MINIMUM_COVERAGE["uniform"] > MINIMUM_COVERAGE["actor_subset"]
+        assert MINIMUM_COVERAGE["uniform"] > MINIMUM_COVERAGE["target_subset"]

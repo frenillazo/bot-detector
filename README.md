@@ -10,7 +10,7 @@ Solo quien miente necesita que sus mensajes *parezcan* mayoritarios. Esta herram
 
 ## Estado
 
-Esqueleto funcional. El motor de coordinación funciona y está validado por inyección sintética; el colector de Bluesky recolecta datos reales; el de X está especificado pero sin implementar (ver [ROADMAP](docs/ROADMAP.md)).
+Motor funcional y validado por inyección sintética, incluidas curvas de degradación por cobertura parcial y a escala de cuenta grande. El colector de Bluesky recolecta datos reales; el de X está especificado pero sin implementar (ver [ROADMAP](docs/ROADMAP.md)).
 
 ## Qué hace, concretamente
 
@@ -20,9 +20,18 @@ interacciones → matriz bipartita → umbral por modelo nulo → grafo → clus
 
 1. **Normaliza** cualquier plataforma a una tupla común: `(actor, acción, objetivo, instante)`.
 2. **Construye** la matriz binaria actor × mensaje. Solo eso: sin contenido, sin metadatos, sin modelos de lenguaje.
-3. **Deriva el umbral de los datos**, no del gusto del analista: aleatoriza el grafo preservando los grados y mide qué solapamiento produce el puro azar entre cuentas igual de activas.
-4. **Agrupa** con Leiden los pares que superan ese umbral.
-5. **Agrega** en el Índice de Inautenticidad de Audiencia, siempre con intervalo de confianza y siempre relativo a cuentas de control.
+3. **Contrasta cada par** con un test hipergeométrico: dadas dos cuentas con k_i y k_j interacciones sobre un universo de N publicaciones, ¿qué probabilidad hay de que coincidieran tanto por azar?
+4. **Deriva el umbral de los datos**, no del gusto del analista: aleatoriza el grafo preservando ambas secuencias de grado y exige superar el p-valor más extremo que produce el azar (max-T de Westfall-Young).
+5. **Agrupa** con Leiden y vuelve a calibrar, ahora a nivel de cluster.
+6. **Agrega** en el Índice de Inautenticidad de Audiencia, siempre con intervalo de confianza y siempre relativo a cuentas de control.
+
+### Por qué no usa similitud coseno
+
+> **El coseno no distingue "2 de 2 compartidos" de "40 de 40". Ambos valen 1,0.**
+
+Con datos completos rara vez importa. Con observación parcial es letal: en validación, 27 cuentas orgánicas con 2 interacciones observadas coincidieron en los mismos 2 posts, salieron con similitud 1,000 y el detector las marcó como granja. Eran personas.
+
+El p-valor hipergeométrico separa esos dos casos por cuarenta órdenes de magnitud. El cambio de estadístico mejoró todo a la vez: recall de 0,45 a 1,00 con el 80% de los datos, campañas de 8 cuentas de invisibles a detectables, y eliminó el único modo de fallo que producía acusaciones falsas.
 
 ## Instalación
 
@@ -64,9 +73,18 @@ Están incrustadas en el código, no solo en la documentación.
 
 Porque en X **no se puede**, y decir lo contrario sería exactamente el tipo de afirmación sin respaldo que la herramienta pretende combatir.
 
-El endpoint `liking_users` de la API de X devuelve un máximo de **100 usuarios por publicación, para siempre**, sin paginación. Un tweet con 40.000 likes expone 100, y no son 100 aleatorios. Cualquier herramienta que publique un porcentaje de likes sobre esa base está extrapolando desde una muestra sesgada.
+El endpoint `liking_users` devuelve un máximo de **100 usuarios por publicación, para siempre**, sin paginación. Un tweet con 40.000 likes expone 100.
 
-Lo que sí es enumerable —retweets, quotes y respuestas vía búsqueda— además trae marca temporal por interacción, que es justo lo que necesita el análisis de sincronía. Los likes no la traen. Ver [`collectors/x.py`](src/botdetector/collectors/x.py).
+Y esos 100 no son aleatorios: son **los más recientes**. Como las granjas actúan en los primeros segundos, en cuentas grandes el tope no degrada la muestra, la invierte:
+
+| Cuenta grande, 440 interactuantes/publicación | Campaña que sobrevive |
+|---|---|
+| Tope aleatorio de 100 | 22% |
+| **Tope por recencia (el real)** | **0%** |
+
+No es una limitación de volumen que se compense recolectando más. Es un sesgo sistemático en contra de la señal buscada, y ningún parámetro lo corrige. Ver [docs/ESCALA.md](docs/ESCALA.md).
+
+Lo que sí sirve —retweets, quotes y respuestas vía búsqueda— devuelve publicaciones, no listas truncadas de interactuantes, y trae marca temporal por interacción. Ver [`collectors/x.py`](src/botdetector/collectors/x.py).
 
 ## Validación
 
@@ -84,7 +102,16 @@ Y la degradación por cobertura parcial, que es lo que determina qué se puede a
 botdetector curve --regime per_target_cap
 ```
 
-Hallazgo principal: **a igual cantidad de datos retenidos, el recall varía entre 0,45 y 0,87 según cómo se hayan perdido**. La forma importa más que la cantidad. Y hay un régimen —observar solo una fracción de las publicaciones, que es el de la búsqueda de X— donde los datos parciales no te dejan ciego sino **equivocado**. Ver [docs/CURVAS.md](docs/CURVAS.md).
+Hallazgo principal: **a igual cantidad de datos retenidos, el recall varía mucho según cómo se hayan perdido**. La forma importa más que la cantidad, porque la señal vive en los *pares* de interacciones. Ver [docs/CURVAS.md](docs/CURVAS.md).
+
+### Dónde la precisión no es 1,00
+
+Con datos completos y campañas de ≥10 cuentas: 0 falsos positivos en 50 ejecuciones. Pero hay dos zonas donde el detector puede equivocarse, y conviene conocerlas:
+
+- **Fidelidad ≤0,3.** Casi nunca detecta nada (4% de las ejecuciones), pero lo poco que detecta es falso.
+- **Cobertura parcial de publicaciones.** Quedan falsos positivos residuales en el 2–4% de las ejecuciones. Todos, sin excepción, del tamaño mínimo permitido: es la firma que permite reconocerlos. Por eso `min_cluster_size` está en 5 y no en 3.
+
+Cifras completas en [METHODOLOGY.md](METHODOLOGY.md).
 
 ## Documentación
 

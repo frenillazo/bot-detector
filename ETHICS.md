@@ -11,6 +11,14 @@ Este documento no es un descargo de responsabilidad. Son las condiciones bajo la
 - **Cualquier cifra sin su curva de sensibilidad.** Sin ella el lector no sabe cuánta campaña se escapó.
 - **Conclusiones sobre intención o autoría.** La herramienta detecta sincronía inverosímil. No prueba quién opera las cuentas ni con qué fin. El salto de "hay coordinación" a "X paga por esto" requiere pruebas de otra naturaleza: documentales, financieras, testificales.
 
+## Clusters pequeños bajo cobertura parcial: inspección manual obligatoria
+
+Los falsos positivos residuales que quedan tienen una firma reconocible: **son exactamente del tamaño mínimo permitido**, tres cuentas, y aparecen solo cuando se observa una fracción de las publicaciones. Ver [docs/CURVAS.md](docs/CURVAS.md).
+
+Regla práctica: si el cluster detectado es pequeño *y* la cobertura es parcial, no se publica sin revisión manual de las cuentas implicadas y de las publicaciones que las conectan. Un grupo de tres cuentas unidas por dos o tres coincidencias no es un hallazgo, es una coincidencia con buena suerte estadística.
+
+Los hallazgos que importan —granjas reales— no tienen ese aspecto: son grandes, densos, y su evidencia supera al azar por órdenes de magnitud, no por un pelo.
+
 ## Lo que sí se publica
 
 Agregados, clusters como entidades anónimas, y siempre en forma relativa:

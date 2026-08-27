@@ -24,37 +24,59 @@ Solo la matriz binaria actor × mensaje. Sin contenido, sin metadatos, sin model
 
 Las interacciones repetidas colapsan a 1: interesa *si* una cuenta amplificó un mensaje, no cuántas veces. Contar repeticiones daría peso desproporcionado a las cuentas más activas.
 
-### 2. Ponderación IDF
+### 2. Test hipergeométrico por par
 
-Cada mensaje se pondera por `log(1 + n_actores / n_que_lo_amplificaron)`.
+**No se usa similitud coseno.** El motivo es un fallo concreto y medido:
 
-Coincidir en un mensaje viral no es evidencia: lo amplificó medio país. Coincidir en uno oscuro sí lo es. Sin esta ponderación, dos cuentas orgánicas poco activas que solo tocaron lo más popular salen con similitud 1,0 y acaban señaladas.
+> El coseno no distingue *"2 de 2 compartidos"* de *"40 de 40 compartidos"*. Ambos valen 1,0.
 
-### 3. Umbral por modelo nulo
+Con datos completos rara vez importa, porque las cuentas tienen muchas interacciones. Con observación parcial es letal: observando el 20% de las publicaciones, 27 cuentas orgánicas con exactamente 2 interacciones observadas coincidieron en los mismos 2 posts y salieron con similitud 1,000. El detector las marcó como granja. Eran personas.
 
-Aquí está la diferencia principal con las herramientas que fijan el umbral a ojo (0,5; 0,8; el percentil 99...). Ese número arbitrario es por donde se ataca un informe: *"¿por qué 0,8 y no 0,9?"*.
+El test hipergeométrico hace la pregunta correcta: dadas dos cuentas que amplificaron k_i y k_j publicaciones de un universo de N, ¿qué probabilidad hay de que compartieran al menos c por azar?
 
-El umbral se deriva de los datos. Se permuta la columna de objetivos del listado de aristas, lo que **conserva de forma exacta tanto lo activo que es cada cuenta como lo popular que es cada mensaje**, y destruye únicamente *con quién coincide cada una*. Se mide qué similitudes produce ese azar y se toma el cuantil 0,999.
+```
+p = P(X >= c),  X ~ Hipergeométrica(N, k_i, k_j)
+```
 
-El umbral resultante significa algo decible en voz alta: *"solo el 0,1% de los pares de cuentas alcanzaría este solapamiento por casualidad, entre cuentas igual de activas"*.
+Para el caso de arriba, p ≈ 3,3e-3. Para una granja real —40 de 40 sobre 300 publicaciones— p ≈ 1e-50. Cuarenta y tantos órdenes de magnitud separan lo que el coseno igualaba.
 
-**Limitación conocida:** la permutación puede generar aristas repetidas, que colapsan a 1. En grafos densos esto adelgaza el nulo y hace el umbral algo conservador — el sentido correcto del error aquí.
+Referencia: Tumminello et al., *Statistically Validated Networks in Bipartite Complex Systems*, PLOS ONE, 2011.
+
+> **Consecuencia práctica:** el filtro `min_target_engagement` debe quedarse en 1. Las publicaciones con un solo interactuante son parte del universo N, y N es justo lo que distingue "2 de 2 sobre 300 publicaciones" de "2 de 2 sobre 25". Subirlo a 2 elimina 55 aristas de 2.398 y hunde la precisión de 1,00 a 0,88.
+
+### 3. Umbral calibrado por permutación (max-T)
+
+El umbral **no** se fija con Bonferroni, y tampoco a ojo. Dos problemas simultáneos:
+
+**El modelo está mal especificado.** La hipergeométrica asume que cada cuenta elige publicaciones equiprobablemente. Falso: la popularidad sigue una ley de potencias. Con Bonferroni salían falsos positivos en 25 de 30 audiencias puramente orgánicas, todos por coincidencias en publicaciones que había tocado casi todo el mundo.
+
+Modelar la popularidad analíticamente tampoco funciona: la propia campaña infla el grado de sus objetivos, así que se estimaría el nulo con datos que contienen la señal, y el nulo declararía esperable justo lo que se busca.
+
+**Los contrastes no son independientes.** Los p-valores de pares que comparten una cuenta están correlacionados, y Bonferroni supone que no.
+
+La permutación de la columna de objetivos conserva **ambas** secuencias de grado —lo activa que es cada cuenta y lo popular que es cada publicación— y destruye solo *con quién coincide cada una*. Tomar el mínimo p-valor que produce el azar es la **corrección max-T de Westfall-Young**, que controla la tasa de error por familia respetando la dependencia real.
+
+Un par se valida si es *más improbable que cualquier cosa que produzca el azar*.
 
 ### 4. Clustering y calibración a nivel de cluster
 
 Leiden en lugar de Louvain: Louvain produce comunidades internamente desconectadas, artefacto que aquí equivaldría a agrupar cuentas sin evidencia mutua de sincronía.
 
-Y después, el paso que casi todas las implementaciones se saltan. **El umbral de similitud controla el error por par, pero una audiencia de 250 cuentas tiene ~31.000 pares.** Al cuantil 0,999, decenas de parejas lo superan por azar, y el clustering las ensambla en coágulos de 4 a 9 cuentas con toda la apariencia de una campaña.
+Y después, el paso que casi todas las implementaciones se saltan. **Validar aristas no basta: la validación controla el error por arista, pero unas pocas aristas fortuitas todavía se ensamblan en coágulos de 3 a 5 cuentas con toda la apariencia de una campaña.**
 
-En validación sintética, esos coágulos hundían la precisión a **0,53 con el recall intacto en 1,00**: la campaña real siempre salía como un cluster grande y limpio, y todo el error venía de esos grupitos.
+Medido: con validación de aristas pero sin esta segunda capa, salían falsos positivos en 9 de 30 audiencias puramente orgánicas. Con ella, 0 de 30.
+
+La segunda capa aplica al nulo **el mismo umbral de validación y el mismo clustering** que a los datos reales, y mide qué masa de evidencia llega a ensamblar el azar.
 
 Un cluster se marca solo si cumple **los tres** criterios:
 
 | Criterio | Descarta |
 |---|---|
-| **Masa de evidencia** ≥ 10 × la máxima que produce el nulo | Coágulos pequeños y fortuitos |
-| **Tamaño** ≥ 3 | Parejas |
+| **Masa de evidencia** ≥ 10 × la máxima que produce el nulo | Coágulos fortuitos |
+| **Tamaño** ≥ 5 | Grupitos, incluidos los falsos positivos residuales |
 | **Densidad** ≥ 0,5 | Comunidades grandes pero laxas |
+
+El umbral de tamaño está en 5 y no en 3 por una razón medida: en 500 ejecuciones sobre audiencias puramente orgánicas con cobertura parcial, los 6 falsos clusters que aparecieron eran **todos** de exactamente 3 cuentas. Subir el suelo los elimina y cuesta perder las campañas de 3 y 4 cuentas, que solo se detectaban el 48% de las veces.
 
 Ninguno es redundante. Ni el tamaño ni la densidad separan por sí solos —cuatro cuentas orgánicas coincidentes alcanzan densidad 1,0 igual que una granja—; y la evidencia por sí sola marca comunidades temáticas grandes solo por ser grandes.
 
@@ -89,25 +111,45 @@ Lo que no se publica: *"la cuenta X tiene un 60% de bots"*.
 
 ## Validación y puntos ciegos
 
-Ejecutar `pytest tests/test_detection.py`. Sobre audiencias sintéticas con verdad terreno, semillas no usadas en el desarrollo:
-
-| Condición | Precisión | Recall |
-|---|---|---|
-| Fidelidad 1,0 | 1,00 | 1,00 |
-| Fidelidad 0,9 | 1,00 | 1,00 |
-| Fidelidad 0,7 | 1,00 | 0,42 |
-| Fidelidad 0,5 | — | **0,00** |
-| Fidelidad 0,3 | — | **0,00** |
-
-| Tamaño de campaña (fidelidad 0,9) | Recall |
-|---|---|
-| 5 cuentas | **0,00** |
-| 10 cuentas | 0,83 |
-| ≥20 cuentas | 1,00 |
-
-**Control negativo:** 0 falsos positivos en 20 ejecuciones sobre audiencias 100% orgánicas de 250 cuentas.
+Ejecutar `pytest tests/test_detection.py`. Cifras medidas con la configuración por defecto, 25 semillas por celda.
 
 `fidelity` es la probabilidad de que una cuenta coordinada amplifique cada mensaje de su repertorio: el mando que simula lo bien que un operador oculta su campaña.
+
+| Fidelidad | Precisión | Recall | Detección |
+|---|---|---|---|
+| 1,0 | 1,00 | 1,00 | 100% |
+| 0,9 | 1,00 | 1,00 | 100% |
+| 0,8 | 1,00 | 1,00 | 100% |
+| 0,7 | 1,00 | 0,99 | 100% |
+| 0,6 | 1,00 | 0,76 | 100% |
+| 0,5 | 0,99 | 0,13 | 48% |
+| 0,4 | 1,00 | 0,03 | 20% |
+| 0,3 | **0,00** | 0,00 | 4% |
+
+| Tamaño de campaña (fidelidad 0,9) | Precisión | Recall | Detección |
+|---|---|---|---|
+| 3 cuentas | 1,00 | 0,48 | 48% |
+| 5 cuentas | 0,98 | 0,72 | 72% |
+| 8 cuentas | 0,99 | 1,00 | 100% |
+| ≥10 cuentas | 1,00 | 1,00 | 100% |
+
+**Controles negativos**, audiencias 100% orgánicas de 250 cuentas, 50 semillas:
+
+| Condición | Ejecuciones con falso positivo |
+|---|---|
+| Datos completos | **0 / 50** |
+| Muestreo uniforme al 50% | 0 / 50 |
+| Muestreo uniforme al 30% | 0 / 50 |
+| Solo 50% de publicaciones | **2 / 50** |
+| Solo 30% de publicaciones | **1 / 50** |
+| Solo 20% de publicaciones | 0 / 50 |
+
+### La precisión no es 1,00 en todas partes, y hay que decirlo
+
+Con datos completos y campañas de ≥10 cuentas, sí: 0 falsos positivos en 50 ejecuciones y precisión 1,00. Pero hay dos zonas donde no:
+
+1. **Fidelidad ≤0,3.** El detector casi nunca ve nada (4% de detección), pero lo poco que ve es falso. Un resultado positivo obtenido sobre una campaña que se sospecha muy evasiva merece escrutinio adicional.
+2. **Subconjunto de publicaciones al 30–50%.** Quedan falsos positivos residuales en el 2–4% de las ejecuciones. Muy por debajo del criterio anterior de coseno —que llegó a marcar 27 cuentas reales de golpe— pero **no es cero**, y una versión previa de este documento afirmó que sí lo era. Era una afirmación basada en una muestra de 40 semillas que no se sostuvo al ampliarla a 50.
 
 ### Cobertura parcial
 
