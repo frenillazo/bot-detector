@@ -83,7 +83,7 @@ Acceso gratuito a datos públicos para investigadores afiliados a **entidades si
 
 La Comisión multó a X con 120 M€ en diciembre de 2025 —40 de ellos por incumplir ese artículo— y aceptó su plan correctora en julio de 2026, con seis meses de implementación y auditoría externa.
 
-> La guía operativa paso a paso está en `DSA-ALTA.md`, en la raíz del repositorio. **No está versionada** (excluida vía `.git/info/exclude`), así que existe solo en la copia local.
+> El procedimiento completo está en el directorio `tramites-dsa/` de la raíz: guía maestra, borradores de acta fundacional y estatutos, plantilla de EIPD, dossier de investigación, textos de solicitud por plataforma y bitácora de actuaciones. **No está versionado** (excluido vía `.git/info/exclude`), así que existe solo en la copia local. Empezar por `tramites-dsa/00-CHECKLIST.md`.
 
 Resumen del camino: constituir una asociación con objeto social de investigación → anclar la pregunta al art. 34(1)(c), efectos sobre el discurso cívico y los procesos electorales → dossier reutilizable con EIPD → formulario propio de cada plataforma.
 
