@@ -10,7 +10,9 @@ Solo quien miente necesita que sus mensajes *parezcan* mayoritarios. Esta herram
 
 ## Estado
 
-Motor funcional y validado por inyección sintética, incluidas curvas de degradación por cobertura parcial y a escala de cuenta grande. El colector de Bluesky recolecta datos reales; el de X está especificado pero sin implementar (ver [ROADMAP](docs/ROADMAP.md)).
+Motor funcional y validado por inyección sintética, incluidas curvas de degradación por cobertura parcial y a escala de cuenta grande. El colector de Bluesky recolecta datos reales.
+
+**El colector de X está bloqueado a la espera de acceso vía Artículo 40(12) del DSA**, no por falta de código. El estado completo, las decisiones ya tomadas con su medición, y qué se puede avanzar mientras tanto están en el [ROADMAP](docs/ROADMAP.md).
 
 ## Qué hace, concretamente
 

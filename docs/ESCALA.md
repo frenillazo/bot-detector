@@ -59,5 +59,9 @@ Dos optimizaciones, ambas en `coordination/validated.py`:
 ## Limitaciones de este análisis
 
 1. **`campaign_speed` es un supuesto.** Se modela la campaña actuando en el primer 5% de la ventana. Es coherente con lo documentado sobre granjas reales, pero no está medido sobre datos reales. Una granja que introdujera retardos aleatorios para imitar comportamiento humano sería menos vulnerable a este sesgo — y también más difícil de detectar por otros medios.
-2. **El truncado real de X puede no ser exactamente por recencia.** Se ha modelado según lo documentado. Confirmarlo requiere acceso real y es una de las primeras cosas que comprobar con datos del Artículo 40(12).
+2. **⚠️ El truncado real de X puede no ser exactamente por recencia. NO ESTÁ VERIFICADO.**
+
+   Se ha modelado según lo documentado públicamente, pero no se ha contrastado contra X. **Todo el argumento de esta página descansa en ese supuesto**, y con él la decisión de no usar `liking_users` ni `retweeted_by`.
+
+   Verificación pendiente, y es la primera tarea en cuanto haya acceso: coger una publicación con miles de interacciones, pedir la lista truncada, y comprobar si los devueltos son los más recientes, los más antiguos o una muestra. Si el truncado resulta ser otro, hay que rehacer la conclusión sobre qué fuente de datos usar.
 3. **Escenario único.** Un solo tamaño de cuenta grande. La transición entre "el tope no muerde" y "el tope mata la señal" depende de la razón entre interactuantes por publicación y el tope, y no está caracterizada en detalle.
